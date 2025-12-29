@@ -6,19 +6,18 @@
 SetWorkingDir A_ScriptDir
 
 ; === Константы и версия ===
-Version := "v1.1"
+Version := "v1.2"
 SALT_CONSTANT := "PageX-V1-Static-Universal-Salt-For-All-Systems-2024-MIT"
 
 ; === РАЗМЕРЫ ОКОН ===
-; Настройки размеров окон (ширина x высота)
-PasswordWindowSize := {Width: 270, Height: 480}      ; Окно ввода пароля
-MainWindowSize := {Width: 700, Height: 520}          ; Основное окно программы
-HelpWindowSize := {Width: 300, Height: 0}            ; Окно помощи (0 = авто)
+PasswordWindowSize := {Width: 270, Height: 480}
+MainWindowSize := {Width: 700, Height: 520}
+HelpWindowSize := {Width: 300, Height: 0}
 
 ; === НАСТРОЙКИ ===
 DataFile := A_ScriptDir "\notes.dat"
 SettingsFile := A_ScriptDir "\settings.ini"
-TabCount := 10  ; 10 вкладок (0-9)
+TabCount := 10
 Tabs := []
 MasterPassword := ""
 Edits := []
@@ -27,122 +26,102 @@ Btn_AlwaysOnTop := ""
 Btn_Theme := ""
 Btn_Transparency := ""
 Btn_Font := ""
-FontSize := 10  ; Начальный размер шрифта
-HelpWindow := ""  ; Для управления окном справки
-CurrentTabIndex := 1  ; Текущая активная вкладка
+FontSize := 10
+HelpWindow := ""
+CurrentTabIndex := 1
+NeedsSave := false
 
 ; === НАСТРОЙКА ШРИФТОВ ===
-; === ИЗМЕНИТЕ ЗДЕСЬ ПЕД ЗАПУСКОМ ===
-; Убедитесь, что шрифты установлены в вашей системе
-; Формат: ["Шрифт1", "Шрифт2", "Шрифт3", ...]
-;Fonts := ["Segoe UI", "Arial", "Arial Narrow", "Consolas", "Courier New"]
 Fonts := ["Segoe UI", "Calibri", "Verdana", "Georgia", "Tahoma"]
 
 ; Загружаем настройки
 AlwaysOnTop := LoadSetting("AlwaysOnTop", 0)
 TransparencyLevel := LoadSetting("TransparencyLevel", 0)
-FontSize := LoadSetting("FontSize", 10)  ; Загружаем размер шрифта
-FontName := LoadSetting("FontName", Fonts[1])  ; Загружаем имя текущего шрифта
-ThemeLevel := LoadSetting("ThemeLevel", 0)  ; 0=светлая, 1=средняя, 2=темная
+FontSize := LoadSetting("FontSize", 10)
+FontName := LoadSetting("FontName", Fonts[1])
+ThemeLevel := LoadSetting("ThemeLevel", 0)
 
-; Проверяем, что выбранный шрифт есть в списке
 if !IsFontInList(FontName) {
-    FontName := Fonts[1]  ; Если шрифт не найден, используем первый из списка
+    FontName := Fonts[1]
 }
 
 ; === ЦВЕТА ТЕМ ===
-; Светлая тема (0)
 LightTheme := {
-    Background: "FFFFFF",      ; Белый фон окна
-    Text: "000000",           ; Черный текст интерфейса
-    Control: "F0F0F0",        ; Светло-серый для контролов
-    Border: "C0C0C0",         ; Серые границы
-    Highlight: "E0E0E0",      ; Подсветка
-    Button: "F0F0F0",         ; Цвет кнопок
-    EditBackground: "FFFFFF", ; Белый фон для текстовых полей
-    EditText: "000000",       ; Черный текст в полях ввода
+    Background: "FFFFFF",
+    Text: "000000",
+    Control: "F0F0F0",
+    Border: "C0C0C0",
+    Highlight: "E0E0E0",
+    Button: "F0F0F0",
+    EditBackground: "FFFFFF",
+    EditText: "000000",
     Name: "Светлая",
-    Icon: "🔆",               ; Яркая лампочка
-    Arrow: "UP"               ; Стрелка вверх текст
+    Icon: "🔆",
+    Arrow: "UP"
 }
 
-; Средняя тема (1)
 MediumTheme := {
-    Background: "D0D0D0",      ; Серый фон окна
-    Text: "000000",           ; Черный текст интерфейса
-    Control: "B0B0B0",        ; Серый
-    Border: "808080",         ; Темные границы
-    Highlight: "C0C0C0",      ; Подсветка
-    Button: "B0B0B0",         ; Цвет кнопок
-    EditBackground: "F0F0F0", ; Светло-серый фон
-    EditText: "000000",       ; Черный текст в полях ввода
+    Background: "D0D0D0",
+    Text: "000000",
+    Control: "B0B0B0",
+    Border: "808080",
+    Highlight: "C0C0C0",
+    Button: "B0B0B0",
+    EditBackground: "F0F0F0",
+    EditText: "000000",
     Name: "Средняя",
-    Icon: "💡",               ; Лампочка
-    Arrow: "UP"               ; Стрелка вверх текст
+    Icon: "💡",
+    Arrow: "UP"
 }
 
-; Темная тема (2) - УЛУЧШЕННАЯ ВЕРСИЯ
 DarkTheme := {
-    Background: "2D2D2D",      ; Темный фон окна
-    Text: "E0E0E0",           ; Светлый текст интерфейса
-    Control: "404040",        ; Темный
-    Border: "606060",         ; Темные границы
-    Highlight: "505050",      ; Подсветка
-    Button: "404040",         ; Цвет кнопок
-    EditBackground: "404040", ; Темно-серый фон для текстовых полей
-    EditText: "A8A8A8",       ; Холодный серый HEX: A8A8A8 = RGB(168,168,168)
+    Background: "2D2D2D",
+    Text: "E0E0E0",
+    Control: "404040",
+    Border: "606060",
+    Highlight: "505050",
+    Button: "404040",
+    EditBackground: "404040",
+    EditText: "A8A8A8",
     Name: "Темная",
-    Icon: "🔦",               ; Фонарик (темная лампочка)
-    Arrow: "UP"               ; Стрелка вверх текст
+    Icon: "🔦",
+    Arrow: "UP"
 }
 
-; Все темы в массиве
 Themes := [LightTheme, MediumTheme, DarkTheme]
 
-; === УЛУЧШЕННОЕ ШИФРОВАНИЕ (ВСЁ В ОДНОМ) ===
-
-; Создает детерминированную соль на основе пароля и константы
+; === УЛУЧШЕННОЕ ШИФРОВАНИЕ ===
 GetSystemSalt() {
     global MasterPassword, SALT_CONSTANT
     
-    ; Если пароль уже введен, создаем соль на его основе
     if MasterPassword {
-        ; Комбинируем пароль с константой для уникальности
         combined := MasterPassword . SALT_CONSTANT
         return CreateDeterministicSalt(combined, 64)
     }
     
-    ; На этапе загрузки используем константу
     return CreateDeterministicSalt(SALT_CONSTANT, 64)
 }
 
-; Создает детерминированную соль фиксированной длины
 CreateDeterministicSalt(input, length) {
     result := Buffer(length, 0)
     
-    ; Простой детерминированный алгоритм на основе FNV-1a
-    hash := 0x811C9DC5  ; Начальное значение FNV-1a
+    hash := 0x811C9DC5
     
-    ; Преобразуем входную строку в байты
     inputBuf := Buffer(StrPut(input, "UTF-8") - 1)
     StrPut(input, inputBuf, "UTF-8")
     
-    ; Хешируем всю строку
     loop inputBuf.Size {
         i := A_Index - 1
         hash := hash ^ NumGet(inputBuf, i, "UChar")
         hash := (hash * 0x01000193) & 0xFFFFFFFF
     }
     
-    ; Используем хеш как seed для генерации соли
     loop length {
         i := A_Index - 1
         
-        ; Псевдослучайный генератор
         hash := (hash * 1103515245 + 12345) & 0xFFFFFFFF
         saltByte := (hash >> 16) & 0xFF
         
-        ; Добавляем позицию для уникальности
         saltByte := saltByte ^ (i & 0xFF)
         
         NumPut("UChar", saltByte, result, i)
@@ -151,37 +130,29 @@ CreateDeterministicSalt(input, length) {
     return result
 }
 
-; Создает усиленный ключ из пароля
 CreateStrongKey(password, length := 256) {
     passwordBuf := Buffer(StrPut(password, "UTF-8") - 1)
     StrPut(password, passwordBuf, "UTF-8")
     
     result := Buffer(length, 0)
     
-    ; Получаем системную соль
     salt := GetSystemSalt()
     
-    ; Генерируем ключ с использованием соли
     loop length {
         i := A_Index - 1
         
-        ; Берем байты из пароля циклически
         passByte := NumGet(passwordBuf, Mod(i, passwordBuf.Size), "UChar")
         
-        ; Берем байты из соли
         saltByte := NumGet(salt, Mod(i, salt.Size), "UChar")
         
-        ; Линейный конгруэнтный генератор для перемешивания
         lcg := i * 1103515245 + 12345 + saltByte
         
-        ; Смешиваем все компоненты
         keyByte := passByte ^ saltByte
         keyByte := keyByte ^ (lcg & 0xFF)
         keyByte := keyByte ^ ((lcg >> 8) & 0xFF)
         keyByte := keyByte ^ ((lcg >> 16) & 0xFF)
         keyByte := keyByte ^ ((lcg >> 24) & 0xFF)
         
-        ; Добавляем зависимость от предыдущего байта
         if (i > 0) {
             prevByte := NumGet(result, i - 1, "UChar")
             keyByte := keyByte ^ prevByte
@@ -193,40 +164,37 @@ CreateStrongKey(password, length := 256) {
     return result
 }
 
-; Улучшенное шифрование с проверкой целостности
 SimpleEncrypt(text, password) {
     if (text = "")
         return ""
     
-    ; Создаем усиленный ключ (256 байт)
     enhancedKey := CreateStrongKey(password, 256)
     
-    ; Преобразуем текст в байты UTF-8
-    textBuf := Buffer(StrPut(text, "UTF-8") - 1)
+    textBufSize := StrPut(text, "UTF-8") - 1
+    if (textBufSize <= 0)
+        return ""
+    
+    textBuf := Buffer(textBufSize + 1, 0)
     StrPut(text, textBuf, "UTF-8")
     
-    ; XOR шифрование с усиленным ключом
     keyLen := enhancedKey.Size
-    loop textBuf.Size {
+    loop textBufSize {
         i := A_Index - 1
         textByte := NumGet(textBuf, i, "UChar")
         keyByte := NumGet(enhancedKey, Mod(i, keyLen), "UChar")
         NumPut("UChar", textByte ^ keyByte, textBuf, i)
     }
     
-    ; Вычисляем контрольную сумму для проверки целостности
     checksum := 0
-    loop textBuf.Size {
+    loop textBufSize {
         i := A_Index - 1
         checksum := (checksum + NumGet(textBuf, i, "UChar")) & 0xFF
     }
     
-    ; Добавляем контрольную сумму в конец
-    NumPut("UChar", checksum, textBuf, textBuf.Size)
+    NumPut("UChar", checksum, textBuf, textBufSize)
     
-    ; HEX кодирование
     hexResult := ""
-    loop textBuf.Size + 1 {  ; +1 для контрольной суммы
+    loop textBufSize + 1 {
         i := A_Index - 1
         hexResult .= Format("{:02X}", NumGet(textBuf, i, "UChar"))
     }
@@ -234,21 +202,17 @@ SimpleEncrypt(text, password) {
     return hexResult
 }
 
-; Улучшенное дешифрование с проверкой целостности
 SimpleDecrypt(hexData, password) {
     if (hexData = "")
         return ""
     
-    ; Проверяем HEX формат
     if Mod(StrLen(hexData), 2) != 0
         return ""
     
-    ; Создаем тот же усиленный ключ
     enhancedKey := CreateStrongKey(password, 256)
     
-    ; Преобразуем HEX в байты
     bufSize := StrLen(hexData) // 2
-    if bufSize < 2  ; Минимум: 1 байт данных + контрольная сумма
+    if bufSize < 2
         return ""
     
     textBuf := Buffer(bufSize, 0)
@@ -259,7 +223,6 @@ SimpleDecrypt(hexData, password) {
         NumPut("UChar", Integer("0x" hexByte), textBuf, i)
     }
     
-    ; Проверяем контрольную сумму
     expectedChecksum := NumGet(textBuf, bufSize - 1, "UChar")
     actualChecksum := 0
     
@@ -269,10 +232,9 @@ SimpleDecrypt(hexData, password) {
     }
     
     if (actualChecksum != expectedChecksum) {
-        return ""  ; Ошибка контрольной суммы
+        return ""
     }
     
-    ; XOR дешифрование (исключая контрольную сумму)
     keyLen := enhancedKey.Size
     loop bufSize - 1 {
         i := A_Index - 1
@@ -281,7 +243,6 @@ SimpleDecrypt(hexData, password) {
         NumPut("UChar", textByte ^ keyByte, textBuf, i)
     }
     
-    ; Возвращаем данные без контрольной суммы
     return StrGet(textBuf, bufSize - 1, "UTF-8")
 }
 
@@ -321,7 +282,6 @@ try {
     if !password
         ExitApp
     
-    ; Проверка длины пароля
     if (StrLen(password) > 100) {
         MsgBox "Пароль слишком длинный! Максимум 100 символов.", "PageX " Version, "Iconx"
         goto InputBoxPass
@@ -359,10 +319,9 @@ if FileExist(DataFile)
     }
 }
 else {
-    Tabs := ["", "", "", "", "", "", "", "", "", ""]  ; 10 пустых вкладок
+    Tabs := ["", "", "", "", "", "", "", "", "", ""]
 }
 
-; Гарантируем 10 вкладок
 while Tabs.Length < TabCount
     Tabs.Push("")
 
@@ -475,59 +434,49 @@ if (Tabs[2] = "") {
 ; === Создание основного GUI ===
 MyGui := Gui(, "PageX " Version " - Защищённый блокнот ")
 MyGui.Opt("+Resize +MinSize700x500")
-
-; Устанавливаем шрифт для ВСЕХ элементов (фиксированный размер 10)
 MyGui.SetFont("s10", "Segoe UI")
-
 MyGui.MarginX := 10
 MyGui.MarginY := 10
 
 ; === ПАНЕЛЬ НАСТРОЕК ===
-; Кнопка "Поверх всех окон" - текстовая
 Btn_AlwaysOnTop := MyGui.Add("Button", "x10 y10 w40 h25", GetArrowText(AlwaysOnTop))
 Btn_AlwaysOnTop.OnEvent("Click", ToggleAlwaysOnTop)
 Btn_AlwaysOnTop.ToolTip := "ОКНО`nПоложение окна: " . (AlwaysOnTop ? "ПОВЕРХ ВСЕХ (ВКЛ)" : "ОБЫЧНОЕ (ВЫКЛ)") . "`nНажмите для переключения"
 
-; Кнопка темы (лампочка) - квадратная
 Btn_Theme := MyGui.Add("Button", "x60 y10 w25 h25", GetThemeIcon(ThemeLevel))
 Btn_Theme.OnEvent("Click", CycleTheme)
 Btn_Theme.ToolTip := "ТЕМА`nТекущая тема: " . GetCurrentTheme().Name . "`nНажмите для переключения"
 
-; Кнопка прозрачности
 Btn_Transparency := MyGui.Add("Button", "x95 y10 w40 h25", GetTransparencyText(TransparencyLevel))
 Btn_Transparency.OnEvent("Click", CycleTransparency)
 Btn_Transparency.ToolTip := "ПРОЗРАЧНОСТЬ`nТекущий уровень: " . GetTransparencyPercent(TransparencyLevel) . "`nНажмите для переключения"
 
-; Кнопка шрифта (вместо текстового индикатора)
 Btn_Font := MyGui.Add("Button", "x145 y10 w120 h25", GetFontButtonText())
 Btn_Font.OnEvent("Click", CycleFont)
 Btn_Font.ToolTip := "ШРИФТ`nТекущий шрифт: " . FontName . " " . FontSize . "pt`nНажмите для смены шрифта`nCtrl+Колесо мыши - изменить размер"
 
-; Кнопка помощи - привязана к правому краю окна
 helpButton := MyGui.Add("Button", "x680 y10 w100 h25", "Помощь F1")
 helpButton.OnEvent("Click", ToggleHelp)
 helpButton.ToolTip := "Открыть справку`nГорячая клавиша: F1"
 
-; Разделительная линия
 sepLine := MyGui.Add("Text", "x10 y45 w780 0x10")
 
-; === ВКЛАДКИ (10 штук) ===
+; === ВКЛАДКИ ===
 tabNames := ["0"]
 loop 9
-    tabNames.Push(A_Index)  ; ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+    tabNames.Push(A_Index)
 
 tabCtrl := MyGui.Add("Tab3", "x10 y60 w780 h380 Choose" CurrentTabIndex, tabNames)
-
-; Сохраняем обработчик изменения вкладки
 tabCtrl.OnEvent("Change", TabChangeHandler)
 
-; Создаём поля ввода для 10 вкладок
+; Создаём поля ввода и привязываем обработчик изменений
 loop TabCount
 {
     tabCtrl.UseTab(A_Index)
     content := Tabs.Length >= A_Index ? Tabs[A_Index] : ""
     editCtrl := MyGui.Add("Edit", "x20 y90 w760 h330 +Multi +Wrap +VScroll", content)
-    editCtrl.SetFont("s" FontSize, FontName)  ; Применяем текущий шрифт (изменяемый)
+    editCtrl.SetFont("s" FontSize, FontName)
+    editCtrl.OnEvent("Change", OnEditChange)
     Edits.Push(editCtrl)
 }
 tabCtrl.UseTab(1)
@@ -535,30 +484,25 @@ tabCtrl.UseTab(1)
 ; Обработчики
 MyGui.OnEvent("Close", SaveAndExit)
 MyGui.OnEvent("Size", GuiSize)
+OnMessage(0x20A, FontSizeWheelHandler)
 
-; Регистрируем обработчик сообщения колеса мыши только для изменения размера шрифта
-OnMessage(0x20A, FontSizeWheelHandler)  ; WM_MOUSEWHEEL = 0x20A
-
-; Применяем начальные настройки (кроме прозрачности)
 ApplyWindowSettings()
-
-; Показываем окно
 MyGui.Show("w" MainWindowSize.Width " h" MainWindowSize.Height)
-
-; ТЕПЕРЬ можно применить прозрачность, т.к. окно создано
 ApplyTransparency()
-
-; Фокус на первую вкладку
 Edits[1].Focus()
 
 ; === ФУНКЦИИ ===
 
-; Получить текст для кнопки "Поверх всех окон"
+; Обработчик изменения текста в поле ввода
+OnEditChange(*) {
+    global NeedsSave
+    NeedsSave := true
+}
+
 GetArrowText(isOnTop) {
     return isOnTop ? "UP" : "DWN"
 }
 
-; Получить текст прозрачности
 GetTransparencyText(level) {
     switch level {
         case 1: return "25%"
@@ -567,7 +511,6 @@ GetTransparencyText(level) {
     }
 }
 
-; Получить процент прозрачности
 GetTransparencyPercent(level) {
     switch level {
         case 1: return "25%"
@@ -576,10 +519,8 @@ GetTransparencyPercent(level) {
     }
 }
 
-; Получить текст для кнопки шрифта
 GetFontButtonText() {
     global FontName, FontSize
-    ; Обрезаем длинное название шрифта если нужно
     displayName := FontName
     if (StrLen(FontName) > 12) {
         displayName := SubStr(FontName, 1, 12) . "…"
@@ -587,7 +528,6 @@ GetFontButtonText() {
     return displayName . " " . FontSize . "pt"
 }
 
-; Получить иконку для текущей темы
 GetThemeIcon(level) {
     global Themes
     if (level >= 0 && level < Themes.Length) {
@@ -596,7 +536,6 @@ GetThemeIcon(level) {
     return Themes[1].Icon
 }
 
-; Обработчик изменения вкладки
 TabChangeHandler(*) {
     global CurrentTabIndex, tabCtrl, Edits
     CurrentTabIndex := tabCtrl.Value
@@ -605,7 +544,6 @@ TabChangeHandler(*) {
     }
 }
 
-; Получить текущую тему
 GetCurrentTheme() {
     global ThemeLevel, Themes
     
@@ -615,7 +553,6 @@ GetCurrentTheme() {
         return Themes[1]
 }
 
-; Переключение режима "Поверх всех окон"
 ToggleAlwaysOnTop(*) {
     global AlwaysOnTop, Btn_AlwaysOnTop, MyGui
     
@@ -634,28 +571,21 @@ ToggleAlwaysOnTop(*) {
     SaveSettings()
 }
 
-; Переключение прозрачности
 CycleTransparency(*) {
     global TransparencyLevel, Btn_Transparency
     
-    ; Циклическое переключение: 0% → 25% → 50% → 0%
     TransparencyLevel := Mod(TransparencyLevel + 1, 3)
-    
-    ; Применяем прозрачность
     ApplyTransparency()
     
-    ; Обновляем кнопку
     Btn_Transparency.Text := GetTransparencyText(TransparencyLevel)
     Btn_Transparency.ToolTip := "ПРОЗРАЧНОСТЬ`nТекущий уровень: " . GetTransparencyPercent(TransparencyLevel) . "`nНажмите для переключения"
     
     SaveSettings()
 }
 
-; Применить прозрачность
 ApplyTransparency() {
     global TransparencyLevel, Version
     
-    ; Проверяем, существует ли окно
     if !WinExist("PageX " Version " - Защищённый блокнот ")
         return
     
@@ -666,33 +596,27 @@ ApplyTransparency() {
     }
 }
 
-; Применить тему ко всем элементам
 ApplyTheme() {
     global MyGui, Btn_AlwaysOnTop, Btn_Theme, Btn_Transparency, Btn_Font, helpButton, sepLine
     global Edits, FontSize, FontName, tabCtrl, ThemeLevel, CurrentTabIndex, AlwaysOnTop, TransparencyLevel
     
     theme := GetCurrentTheme()
     
-    ; Обновляем текст на кнопках (сохраняем текущие состояния)
     Btn_AlwaysOnTop.Text := GetArrowText(AlwaysOnTop)
     Btn_Transparency.Text := GetTransparencyText(TransparencyLevel)
     Btn_Font.Text := GetFontButtonText()
     
-    ; Применяем тему
     ApplySimpleTheme(theme)
 }
 
-; Применить простую тему (меняем только цвета)
 ApplySimpleTheme(theme) {
     global MyGui, Btn_AlwaysOnTop, Btn_Theme, Btn_Transparency, Btn_Font, helpButton, sepLine
     global Edits, tabCtrl, FontSize, FontName
     
-    ; Фон окна
     try {
         MyGui.BackColor := theme.Background
     }
     
-    ; Текстовые элементы
     for ctrl in [sepLine] {
         if IsObject(ctrl) {
             try {
@@ -702,7 +626,6 @@ ApplySimpleTheme(theme) {
         }
     }
     
-    ; Кнопки
     for ctrl in [helpButton, Btn_Theme, Btn_AlwaysOnTop, Btn_Transparency, Btn_Font] {
         if IsObject(ctrl) {
             try {
@@ -712,18 +635,15 @@ ApplySimpleTheme(theme) {
         }
     }
     
-    ; Вкладки
     if IsObject(tabCtrl) {
         try {
             tabCtrl.SetFont("c" . theme.Text)
         }
     }
     
-    ; Текстовые поля - все темы используют цвета из своих определений
     loop Edits.Length {
         if IsObject(Edits[A_Index]) {
             try {
-                ; Используем цвета из текущей темы
                 Edits[A_Index].SetFont("c" . theme.EditText " s" FontSize, FontName)
                 Edits[A_Index].Opt("Background" . theme.EditBackground)
             }
@@ -731,21 +651,14 @@ ApplySimpleTheme(theme) {
     }
 }
 
-; Циклическое переключение темы
 CycleTheme(*) {
     global ThemeLevel
     
-    ; Переключаем на следующую тему (0-2, затем снова 0)
     ThemeLevel := Mod(ThemeLevel + 1, 3)
-    
-    ; Применяем тему
     ApplyTheme()
-    
-    ; Сохраняем настройки
     SaveSettings()
 }
 
-; Проверка наличия шрифта в списке
 IsFontInList(fontName) {
     global Fonts
     
@@ -757,26 +670,20 @@ IsFontInList(fontName) {
     return false
 }
 
-; Обработчик колеса мыши только для изменения размера шрифта
 FontSizeWheelHandler(wParam, lParam, msg, hwnd) {
-    global FontSize, FontName, Edits
+    global FontSize, FontName, Edits, NeedsSave
     
-    ; Проверяем, активно ли основное окно
     if !WinActive("PageX " Version " - Защищённый блокнот ")
         return
     
-    ; Проверяем, зажат ли Ctrl
     if !GetKeyState("Ctrl")
         return
     
-    ; Проверяем, находится ли курсор над текстовым полем
     try {
         MouseGetPos(, , &winId, &controlId, 2)
         
-        ; Проверяем все Edit контролы
         for editCtrl in Edits {
             if (controlId = editCtrl.Hwnd) {
-                ; Анализируем направление прокрутки
                 delta := wParam >> 16
                 delta := delta > 0x7FFF ? -(0x10000 - delta) : delta
                 
@@ -784,48 +691,44 @@ FontSizeWheelHandler(wParam, lParam, msg, hwnd) {
                     if (FontSize < 24) {
                         FontSize += 1
                         UpdateFontAndSize()
+                        NeedsSave := true
                     }
                 }
                 else if (delta < 0) {
                     if (FontSize > 8) {
                         FontSize -= 1
                         UpdateFontAndSize()
+                        NeedsSave := true
                     }
                 }
-                return 0  ; Блокируем стандартную обработку
+                return 0
             }
         }
     }
     catch {
-        ; Игнорируем ошибки
     }
 }
 
-; Изменение размера окна
 GuiSize(GuiObj, MinMax, Width, Height) {
     global
     
-    if (MinMax = -1) ; Минимизировано
+    if (MinMax = -1)
         return
     
-    ; Изменяем размер вкладок
     if (IsObject(tabCtrl)) {
         tabCtrl.Move(, , Width - 20, Height - 100)
     }
     
-    ; Изменяем размер текстовых полей
     loop TabCount {
         if (Edits.Length >= A_Index) {
             Edits[A_Index].Move(, , Width - 40, Height - 140)
         }
     }
     
-    ; Растягиваем разделительную линию
     if (IsObject(sepLine)) {
         sepLine.Move(, , Width - 20)
     }
     
-    ; Перемещаем кнопки
     if (Btn_Font) {
         Btn_Font.Move(Width - 245)
     }
@@ -835,11 +738,9 @@ GuiSize(GuiObj, MinMax, Width, Height) {
     }
 }
 
-; Циклическое переключение шрифтов (только по клику)
 CycleFont(*) {
-    global Fonts, FontName, Btn_Font
+    global Fonts, FontName, Btn_Font, NeedsSave
     
-    ; Находим текущий шрифт в массиве
     currentIndex := 0
     loop Fonts.Length {
         if (Fonts[A_Index] = FontName) {
@@ -848,27 +749,24 @@ CycleFont(*) {
         }
     }
     
-    ; Переключаем на следующий шрифт
     if (currentIndex = Fonts.Length) {
-        FontName := Fonts[1]  ; Если последний, переходим к первому
+        FontName := Fonts[1]
     } else {
         FontName := Fonts[currentIndex + 1]
     }
     
     UpdateFontAndSize()
+    NeedsSave := true
 }
 
-; Обновление шрифта и размера
 UpdateFontAndSize() {
     global Btn_Font, FontName, FontSize, Edits, TabCount, CurrentTabIndex
     
-    ; Сохраняем текущий текст
     savedTexts := []
     loop Edits.Length {
         savedTexts.Push(Edits[A_Index].Text)
     }
     
-    ; Сохраняем текущий фокус
     focusedEdit := 0
     loop Edits.Length {
         if Edits[A_Index].Focused {
@@ -877,27 +775,20 @@ UpdateFontAndSize() {
         }
     }
     
-    ; Обновляем текст на кнопке
     Btn_Font.Text := GetFontButtonText()
     Btn_Font.ToolTip := "ШРИФТ`nТекущий шрифт: " . FontName . " " . FontSize . "pt`nНажмите для смены шрифта`nCtrl+Колесо мыши - изменить размер"
     
-    ; Обновляем шрифт во всех текстовых полях и сохраняем текст
     loop TabCount {
         if (Edits.Length >= A_Index) {
             try {
-                ; Обновляем шрифт
                 Edits[A_Index].SetFont("s" FontSize, FontName)
-                
-                ; Восстанавливаем текст
                 Edits[A_Index].Text := savedTexts[A_Index]
             }
         }
     }
     
-    ; Применяем текущую тему (обновляем цвета)
     ApplyTheme()
     
-    ; Восстанавливаем фокус
     if (focusedEdit > 0 && focusedEdit <= Edits.Length) {
         try {
             Edits[focusedEdit].Focus()
@@ -909,24 +800,33 @@ UpdateFontAndSize() {
         }
     }
     
-    ; Сохраняем настройки
     SaveSettings()
 }
 
-; Сохранение данных (без выхода)
+; ФУНКЦИЯ СОХРАНЕНИЯ ДАННЫХ
 SaveData(*) {
-    global
+    global DataFile, TabCount, Edits, Tabs, MasterPassword, NeedsSave
     
     try {
-        ; Собираем текст со всех 10 вкладок
-        text := ""
+        ; Обновляем массив Tabs из всех полей ввода
         loop TabCount {
-            if (A_Index > 1)
-                text .= "`n--PageX-TAB--`n"
-            text .= Edits[A_Index].Text
+            if (Edits.Length >= A_Index && IsObject(Edits[A_Index])) {
+                Tabs[A_Index] := Edits[A_Index].Text
+            } else {
+                Tabs[A_Index] := ""
+            }
         }
         
-        ; Шифруем с улучшенным алгоритмом
+        ; Формируем строку для шифрования
+        text := ""
+        loop TabCount {
+            if (A_Index > 1) {
+                text .= "`n--PageX-TAB--`n"
+            }
+            text .= Tabs[A_Index]
+        }
+        
+        ; Шифруем данные
         encrypted := SimpleEncrypt(text, MasterPassword)
         
         ; Сохраняем в файл
@@ -934,53 +834,65 @@ SaveData(*) {
             FileDelete DataFile
         }
         
-        FileAppend encrypted, DataFile, "UTF-8"
+        file := FileOpen(DataFile, "w")
+        if IsObject(file) {
+            file.Write(encrypted)
+            file.Close()
+        }
         
         ; Сохраняем настройки
         SaveSettings()
-    }
-    catch as e {
-        ; Тихий сбой - не показываем сообщений об ошибках
+        
+        ; Сбрасываем флаг необходимости сохранения
+        NeedsSave := false
+        
+        return true
+        
+    } catch as e {
+        MsgBox "Ошибка сохранения: " e.Message, "PageX " Version " - Ошибка", "Iconx"
+        return false
     }
 }
 
-; Сохранение и выход
 SaveAndExit(*) {
     global
     
-    ; Сохраняем данные
+    ; Всегда пытаемся сохранить при выходе
     SaveData()
     
-    ; Выходим
     ExitApp
 }
 
 ApplyWindowSettings() {
     global AlwaysOnTop, MyGui
     
-    ; "Поверх всех окон"
     if AlwaysOnTop
         MyGui.Opt("+AlwaysOnTop")
     
-    ; Применяем тему
     ApplyTheme()
 }
 
+; ФУНКЦИЯ СОХРАНЕНИЯ НАСТРОЕК
 SaveSettings() {
-    ; Сохраняем все настройки
+    global SettingsFile, AlwaysOnTop, TransparencyLevel, FontSize, FontName, ThemeLevel
+    
     try {
+        ; Простое сохранение настроек
         IniWrite(AlwaysOnTop, SettingsFile, "Window", "AlwaysOnTop")
         IniWrite(TransparencyLevel, SettingsFile, "Window", "TransparencyLevel")
         IniWrite(FontSize, SettingsFile, "Font", "Size")
         IniWrite(FontName, SettingsFile, "Font", "Name")
         IniWrite(ThemeLevel, SettingsFile, "Theme", "ThemeLevel")
-    }
-    catch {
-        ; Игнорируем ошибки
+        
+        return true
+    } catch {
+        return false
     }
 }
 
 LoadSetting(Key, Default) {
+    global SettingsFile
+    
     if FileExist(SettingsFile) {
         try {
             if (Key = "AlwaysOnTop")
@@ -1001,25 +913,20 @@ LoadSetting(Key, Default) {
     return Default
 }
 
-; Функция переключения справки (открыть/закрыть)
 ToggleHelp(*) {
     global HelpWindow
     
-    ; Если окно помощи существует и видимо
     if IsObject(HelpWindow) && HelpWindow.Hwnd && WinExist("ahk_id " HelpWindow.Hwnd) {
         HelpWindow.Destroy()
         HelpWindow := ""
     } else {
-        ; Иначе создаем новое окно
         ShowHelp()
     }
 }
 
-; Показать справку
 ShowHelp(*) {
     global HelpWindow, HelpWindowSize, Version, ThemeLevel, Themes, AlwaysOnTop, TransparencyLevel, FontName, FontSize
     
-    ; Закрываем предыдущее окно справки, если оно существует
     if IsObject(HelpWindow) {
         try {
             HelpWindow.Destroy()
@@ -1030,13 +937,11 @@ ShowHelp(*) {
         }
     }
     
-    ; Создаём окно справки поверх всех окон
     HelpWindow := Gui("+AlwaysOnTop +ToolWindow", "PageX " Version " - Справка ")
     HelpWindow.SetFont("s10", "Segoe UI")
     HelpWindow.MarginX := 20
     HelpWindow.MarginY := 20
     
-    ; Применяем текущую тему к окну справки
     theme := GetCurrentTheme()
     HelpWindow.BackColor := theme.Background
     
@@ -1086,18 +991,15 @@ ShowHelp(*) {
     "Версия: " Version "`n" .
     "Автор: https://github.com/IgerOK"
     
-    ; Добавляем текст справки
     helpTextCtrl := HelpWindow.Add("Text", , helpText)
     helpTextCtrl.SetFont("c" . theme.Text)
     helpTextCtrl.Opt("Background" . theme.Background)
     
-    ; Добавляем кнопку закрытия
     closeBtn := HelpWindow.Add("Button", "w100 Center", "Закрыть")
     closeBtn.OnEvent("Click", (*) => HelpWindow.Destroy())
     closeBtn.SetFont("c" . theme.Text)
     closeBtn.Opt("Background" . theme.Button)
     
-    ; Параметры отображения окна помощи
     if (HelpWindowSize.Width > 0 && HelpWindowSize.Height > 0) {
         HelpWindow.Show("w" HelpWindowSize.Width " h" HelpWindowSize.Height " Center")
     }
@@ -1108,50 +1010,50 @@ ShowHelp(*) {
         HelpWindow.Show("Center")
     }
     
-    ; Устанавливаем обработчик закрытия окна
     HelpWindow.OnEvent("Close", (*) => HelpWindow := "")
     HelpWindow.OnEvent("Escape", (*) => HelpWindow.Destroy())
 }
 
 ; === ГОРЯЧИЕ КЛАВИШИ ===
 #HotIf WinActive("PageX " Version " - Защищённый блокнот ")
-^s::SaveData()      ; Сохранить (без выхода)
-^q::SaveAndExit()   ; Сохранить и выйти
-Esc::SaveAndExit()  ; Сохранить и выйти
-F1::ToggleHelp()    ; Открыть/закрыть справку
+^s::SaveData()
+^q::SaveAndExit()
+Esc::SaveAndExit()
+F1::ToggleHelp()
 
-; Переключение вкладок Ctrl+0..9
-^0::SwitchTab(1)    ; Вкладка 0
-^1::SwitchTab(2)    ; Вкладка 1
-^2::SwitchTab(3)    ; Вкладка 2
-^3::SwitchTab(4)    ; Вкладка 3
-^4::SwitchTab(5)    ; Вкладка 4
-^5::SwitchTab(6)    ; Вкладка 5
-^6::SwitchTab(7)    ; Вкладка 6
-^7::SwitchTab(8)    ; Вкладка 7
-^8::SwitchTab(9)    ; Вкладка 8
-^9::SwitchTab(10)   ; Вкладка 9
+^0::SwitchTab(1)
+^1::SwitchTab(2)
+^2::SwitchTab(3)
+^3::SwitchTab(4)
+^4::SwitchTab(5)
+^5::SwitchTab(6)
+^6::SwitchTab(7)
+^7::SwitchTab(8)
+^8::SwitchTab(9)
+^9::SwitchTab(10)
 
-; Горячие клавиши для изменения размера шрифта (альтернатива колесу мыши)
-^+Up:: {  ; Ctrl+Shift+Up - увеличить шрифт
+^+Up:: {
+    global FontSize, NeedsSave
     if (FontSize < 24) {
         FontSize += 1
         UpdateFontAndSize()
+        NeedsSave := true
     }
 }
 
-^+Down:: {  ; Ctrl+Shift+Down - уменьшить шрифт
+^+Down:: {
+    global FontSize, NeedsSave
     if (FontSize > 8) {
         FontSize -= 1
         UpdateFontAndSize()
+        NeedsSave := true
     }
 }
-
 #HotIf
 
 #HotIf WinActive("PageX " Version " - Справка ")
-F1::ToggleHelp()    ; Закрыть окно помощи (F1 в окне помощи)
-Esc:: {             ; Esc тоже закрывает окно помощи
+F1::ToggleHelp()
+Esc:: {
     global HelpWindow
     if IsObject(HelpWindow) {
         HelpWindow.Destroy()
@@ -1160,20 +1062,21 @@ Esc:: {             ; Esc тоже закрывает окно помощи
 }
 #HotIf
 
-; Функция переключения вкладок
 SwitchTab(TabNumber) {
     global tabCtrl, Edits, CurrentTabIndex
     
     if (TabNumber >= 1 && TabNumber <= 10) {
-        tabCtrl.Choose(TabNumber)  ; Переключаем вкладку
+        tabCtrl.Choose(TabNumber)
         CurrentTabIndex := TabNumber
         if (Edits.Length >= TabNumber) {
-            Edits[TabNumber].Focus()  ; Фокус на текстовое поле
+            Edits[TabNumber].Focus()
         }
     }
 }
 
-; Обработчик закрытия программы
 OnExit(*) {
-    SaveData()
+    global NeedsSave
+    if (NeedsSave) {
+        SaveData()
+    }
 }
