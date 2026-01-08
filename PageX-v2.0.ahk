@@ -9,10 +9,9 @@ SetWorkingDir A_ScriptDir
 Version := "v2.0"
 
 ; === НАСТРОЙКИ ===
-; Извлекаем имя скрипта без расширения
 SplitPath A_ScriptName, , , &scriptExt, &scriptNameNoExt
 ScriptBaseName := scriptNameNoExt
-DataFile := A_ScriptDir "\" ScriptBaseName ".ddd"  ; Один файл для всех данных
+DataFile := A_ScriptDir "\" ScriptBaseName ".ddd"
 TabCount := 10
 
 ; === РАЗМЕРЫ ОКОН ПО УМОЛЧАНИЮ ===
@@ -20,18 +19,14 @@ DEFAULT_MAIN_WIDTH := 565
 DEFAULT_MAIN_HEIGHT := 180
 DEFAULT_HELP_WIDTH := 300
 DEFAULT_HELP_HEIGHT := 550
-
-; Минимальные размеры окна
 MIN_MAIN_WIDTH := 565
 MIN_MAIN_HEIGHT := 180
 
 ; === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 global Tabs := []
-global TabContents := []  ; Хранилище текста для каждой вкладки
-global TabHeaders := []   ; Кнопки вкладок
+global TabContents := []
+global TabHeaders := []
 global CursorPositions := []
-global Edits := []
-global LineNumberEdits := []
 global Btn_AlwaysOnTop := ""
 global Btn_Theme := ""
 global Btn_Transparency := ""
@@ -42,374 +37,22 @@ global FontSize := 10
 global HelpWindow := ""
 global CurrentTabIndex := 1
 global NeedsSave := false
-global LastFocusedEdit := 0
 global SyncTimer := ""
 global LineNumbersData := Map()
 global VisibleLinesCache := 30
 global LastScrollPositions := []
-global LineNumbersInitialized := false
 global LastHScrollPositions := []
 global lineNumberCtrl := ""
 global contentEdit := ""
 global MyGui := ""
 global LineNumberWidth := 60
-
-; === НАСТРОЙКИ ===
+global AlwaysOnTop := 0
+global TransparencyLevel := 0
+global FontName := "Consolas"
+global ThemeLevel := 0
 global TabSize := 4
 global TabSizes := [2, 4, 8]
-
-; === НАСТРОЙКА ШРИФТОВ ===
 global Fonts := ["Consolas", "Cascadia Code", "JetBrains Mono", "Fira Code", "Courier New"]
-
-; === ФУНКЦИЯ ДЛЯ СОХРАНЕНИЯ ТЕКСТА В UTF-8 БЕЗ BOM С WINDOWS CRLF ===
-SaveTextToFileUTF8NoBOM(filePath, text) {
-    try {
-        folderPath := SubStr(filePath, 1, InStr(filePath, "\", , -1) - 1)
-        if (folderPath != "" && !DirExist(folderPath)) {
-            DirCreate(folderPath)
-        }
-        
-        ; Убедимся, что переводы строк в Windows формате CRLF
-        text := StrReplace(text, "`r`r`n", "`r`n")
-        text := StrReplace(text, "`n", "`r`n")
-        text := StrReplace(text, "`r`r`n", "`r`n")
-        
-        file := FileOpen(filePath, "w", "UTF-8-RAW")
-        file.Write(text)
-        file.Close()
-        return true
-    }
-    catch as e {
-        MsgBox "Ошибка сохранения файла " filePath ": " e.Message
-        return false
-    }
-}
-
-; === ЗАГРУЗКА ДАННЫХ И НАСТРОЕК ИЗ ОДНОГО ФАЙЛА ===
-LoadData() {
-    global DataFile, Tabs, TabCount, TabContents, ScriptBaseName
-    global AlwaysOnTop, TransparencyLevel, FontSize, FontName, ThemeLevel, TabSize, CursorPositions
-    
-    ; Инициализируем массивы значениями по умолчанию
-    Tabs := []
-    TabContents := []
-    CursorPositions := []
-    
-    loop TabCount {
-        Tabs.Push("")
-        TabContents.Push("")
-        CursorPositions.Push(1)
-    }
-    
-    ; Инициализируем настройки по умолчанию
-    AlwaysOnTop := 0
-    TransparencyLevel := 0
-    FontSize := 10
-    FontName := "Consolas"
-    ThemeLevel := 0
-    TabSize := 4
-    
-    if FileExist(DataFile) {
-        try {
-            content := FileRead(DataFile, "UTF-8")
-            
-            if (content != "") {
-                ; Разделяем на секции
-                sections := StrSplit(content, "`n---SECTION---`n", "`r")
-                
-                for section in sections {
-                    trimmedSection := Trim(section)
-                    if (trimmedSection = "") {
-                        continue
-                    }
-                    
-                    ; Проверяем тип секции
-                    firstLine := SubStr(trimmedSection, 1, InStr(trimmedSection "`n", "`n") - 1)
-                    
-                    if (firstLine = "[SETTINGS]") {
-                        ; Загружаем настройки
-                        settingsLines := StrSplit(trimmedSection, "`n", "`r")
-                        for line in settingsLines {
-                            trimmedLine := Trim(line)
-                            if (trimmedLine = "" || SubStr(trimmedLine, 1, 1) = "[" || SubStr(trimmedLine, 1, 1) = ";") {
-                                continue
-                            }
-                            
-                            if (InStr(trimmedLine, "=")) {
-                                lineParts := StrSplit(trimmedLine, "=", "", 2)
-                                key := Trim(lineParts[1])
-                                value := Trim(lineParts[2])
-                                
-                                switch key {
-                                    case "AlwaysOnTop": AlwaysOnTop := Integer(value)
-                                    case "TransparencyLevel": TransparencyLevel := Integer(value)
-                                    case "FontSize": FontSize := Integer(value)
-                                    case "FontName": FontName := value
-                                    case "ThemeLevel": ThemeLevel := Integer(value)
-                                    case "TabSize": TabSize := Integer(value)
-                                }
-                            }
-                        }
-                    }
-                    else if (firstLine = "[CURSOR_POSITIONS]") {
-                        ; Загружаем позиции курсора
-                        cursorLines := StrSplit(trimmedSection, "`n", "`r")
-                        for line in cursorLines {
-                            trimmedLine := Trim(line)
-                            if (trimmedLine = "" || SubStr(trimmedLine, 1, 1) = "[" || SubStr(trimmedLine, 1, 1) = ";") {
-                                continue
-                            }
-                            
-                            if (InStr(trimmedLine, "=")) {
-                                lineParts := StrSplit(trimmedLine, "=", "", 2)
-                                key := Trim(lineParts[1])
-                                value := Trim(lineParts[2])
-                                
-                                if (SubStr(key, 1, 3) = "Tab") {
-                                    tabIndex := Integer(SubStr(key, 4)) + 1
-                                    if (tabIndex >= 1 && tabIndex <= TabCount) {
-                                        pos := Integer(value)
-                                        if (pos > 0) {
-                                            CursorPositions[tabIndex] := pos
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else if (firstLine = "[TAB_DATA]") {
-                        ; Загружаем данные вкладок
-                        tabDataStart := InStr(trimmedSection, "`n", , 1)
-                        if (tabDataStart > 0) {
-                            tabData := SubStr(trimmedSection, tabDataStart + 1)
-                            
-                            ; Обрабатываем различные форматы разделителей
-                            ; 1. Новый формат: <TAB-1< (данные ВЫШЕ разделителя)
-                            ; 2. Старый формат: --PageX-TAB--
-                            
-                            ; Проверяем наличие нового формата
-                            if (InStr(tabData, "<TAB-")) {
-                                ; Новый формат с направленными разделителями
-                                currentTab := 1
-                                pos := 1
-                                
-                                ; Ищем все разделители <TAB-X<
-                                while (pos := InStr(tabData, "<TAB-", , pos)) {
-                                    ; Находим конец разделителя
-                                    endPos := InStr(tabData, "<", , pos + 5)
-                                    if (!endPos) {
-                                        break
-                                    }
-                                    
-                                    ; Извлекаем текст ДО разделителя (данные текущей вкладки)
-                                    tabContent := SubStr(tabData, 1, pos - 1)
-                                    
-                                    ; Извлекаем номер вкладки из разделителя
-                                    separator := SubStr(tabData, pos, endPos - pos + 1)
-                                    tabNumFromSeparator := Integer(SubStr(separator, 6, InStr(separator, "<", , 2) - 6))
-                                    
-                                    ; Сохраняем содержимое вкладки
-                                    if (currentTab <= TabCount) {
-                                        TabContents[currentTab] := tabContent
-                                    }
-                                    
-                                    ; Удаляем обработанную часть
-                                    tabData := SubStr(tabData, endPos + 1)
-                                    pos := 1
-                                    currentTab++
-                                }
-                                
-                                ; Добавляем последнюю вкладку (после последнего разделителя)
-                                if (currentTab <= TabCount && tabData != "") {
-                                    TabContents[currentTab] := tabData
-                                }
-                            } 
-                            else if (InStr(tabData, "--PageX-TAB--")) {
-                                ; Старый формат (--PageX-TAB--)
-                                tempTabs := StrSplit(tabData, "`n--PageX-TAB--`n", "`r")
-                                
-                                ; Заполняем TabContents данными из файла
-                                loop TabCount {
-                                    index := A_Index
-                                    if (index <= tempTabs.Length) {
-                                        TabContents[index] := tempTabs[index]
-                                    } else {
-                                        TabContents[index] := ""
-                                    }
-                                }
-                            }
-                            else {
-                                ; Файл содержит только одну вкладку (первую)
-                                if (tabData != "") {
-                                    TabContents[1] := tabData
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        catch as e {
-            ; Если файл поврежден, используем значения по умолчанию
-            MsgBox "Ошибка загрузки файла данных. Используются значения по умолчанию.`n" e.Message, "PageX " Version, "Icon!"
-        }
-    }
-    
-    ; Проверяем, что шрифт в списке
-    if !IsFontInList(FontName) {
-        FontName := Fonts[1]
-    }
-}
-
-; === СОХРАНЕНИЕ ВСЕХ ДАННЫХ В ОДИН ФАЙЛ ===
-SaveData(showMessage := false) {
-    global DataFile, TabCount, TabContents, NeedsSave, Version, CurrentTabIndex, contentEdit
-    global AlwaysOnTop, TransparencyLevel, FontSize, FontName, ThemeLevel, TabSize, CursorPositions, MyGui
-    
-    try {
-        ; Сохраняем текущую вкладку
-        if (IsObject(contentEdit) && contentEdit.Hwnd) {
-            TabContents[CurrentTabIndex] := contentEdit.Value
-        }
-        
-        ; Сохраняем позицию курсора текущей вкладки
-        if (IsObject(contentEdit) && contentEdit.Hwnd) {
-            try {
-                cursorPos := SendMessage(0x00B0, 0, 0, contentEdit.Hwnd) + 1
-                if (cursorPos > 0) {
-                    CursorPositions[CurrentTabIndex] := cursorPos
-                }
-            }
-            catch {
-                CursorPositions[CurrentTabIndex] := 1
-            }
-        }
-        
-        ; Получаем размер окна
-        windowWidth := DEFAULT_MAIN_WIDTH
-        windowHeight := DEFAULT_MAIN_HEIGHT
-        if (IsObject(MyGui)) {
-            try {
-                MyGui.GetPos(, , &w, &h)
-                windowWidth := w
-                windowHeight := h
-            }
-            catch {
-                ; Используем значения по умолчанию
-            }
-        }
-        
-        ; Формируем содержимое файла
-        content := ""
-        
-        ; Секция настроек
-        content .= "[SETTINGS]`r`n"
-        content .= "AlwaysOnTop=" . AlwaysOnTop . "`r`n"
-        content .= "TransparencyLevel=" . TransparencyLevel . "`r`n"
-        content .= "FontSize=" . FontSize . "`r`n"
-        content .= "FontName=" . FontName . "`r`n"
-        content .= "ThemeLevel=" . ThemeLevel . "`r`n"
-        content .= "TabSize=" . TabSize . "`r`n"
-        content .= "---SECTION---`r`n"
-        
-        ; Секция позиций курсора
-        content .= "[CURSOR_POSITIONS]`r`n"
-        loop TabCount {
-            content .= "Tab" . (A_Index - 1) . "=" . CursorPositions[A_Index] . "`r`n"
-        }
-        content .= "---SECTION---`r`n"
-        
-        ; Секция размера окна
-        content .= "[WINDOW_SIZE]`r`n"
-        content .= "Width=" . windowWidth . "`r`n"
-        content .= "Height=" . windowHeight . "`r`n"
-        content .= "---SECTION---`r`n"
-        
-        ; Секция данных вкладок с направленными разделителями (данные ВЫШЕ разделителя)
-        content .= "[TAB_DATA]`r`n"
-        loop TabCount {
-            tabIndex := A_Index  ; Нумерация с 1 до 10
-            content .= TabContents[tabIndex]
-            
-            ; Добавляем направленный разделитель, кроме последней вкладки
-            ; Формат: <TAB-X< означает, что данные вкладки X находятся ВЫШЕ этой строки
-            if (tabIndex < TabCount) {
-                content .= "`r`n<TAB-" . tabIndex . "<`r`n"
-            }
-        }
-        content .= "`r`n"
-        
-        ; Сохраняем в файл
-        if (!SaveTextToFileUTF8NoBOM(DataFile, content)) {
-            throw Error("Не удалось сохранить данные в файл")
-        }
-        
-        NeedsSave := false
-        
-        if (showMessage) {
-            ShowSaveMessage()
-        }
-        
-        return true
-        
-    } catch as e {
-        MsgBox "Ошибка сохранения: " e.Message, "PageX " Version " - Ошибка", "Iconx"
-        return false
-    }
-}
-
-; === ЗАГРУЗКА РАЗМЕРА ОКНА ИЗ ФАЙЛА ===
-LoadWindowSizeSetting(key, defaultValue) {
-    global DataFile
-    
-    if FileExist(DataFile) {
-        try {
-            content := FileRead(DataFile, "UTF-8")
-            
-            sections := StrSplit(content, "`n---SECTION---`n", "`r")
-            
-            for section in sections {
-                trimmedSection := Trim(section)
-                if (trimmedSection = "") {
-                    continue
-                }
-                
-                firstLine := SubStr(trimmedSection, 1, InStr(trimmedSection "`n", "`n") - 1)
-                
-                if (firstLine = "[WINDOW_SIZE]") {
-                    lines := StrSplit(trimmedSection, "`n", "`r")
-                    for line in lines {
-                        trimmedLine := Trim(line)
-                        if (trimmedLine = "" || SubStr(trimmedLine, 1, 1) = "[" || SubStr(trimmedLine, 1, 1) = ";") {
-                            continue
-                        }
-                        
-                        if (InStr(trimmedLine, "=")) {
-                            lineParts := StrSplit(trimmedLine, "=", "", 2)
-                            lineKey := Trim(lineParts[1])
-                            lineValue := Trim(lineParts[2])
-                            
-                            if (lineKey = key) {
-                                return Integer(lineValue)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        catch {
-            return defaultValue
-        }
-    }
-    
-    return defaultValue
-}
-
-; === ИНИЦИАЛИЗАЦИЯ МАССИВОВ ===
-loop TabCount {
-    LastScrollPositions.Push(0)
-    LastHScrollPositions.Push(0)
-}
 
 ; === ЦВЕТА ТЕМ ===
 MediumTheme := {
@@ -499,7 +142,6 @@ GetTabSizeToolTip() {
 
 GetCurrentTheme() {
     global ThemeLevel, Themes
-    
     if ThemeLevel >= 0 && ThemeLevel < Themes.Length
         return Themes[ThemeLevel + 1]
     else
@@ -508,7 +150,6 @@ GetCurrentTheme() {
 
 IsFontInList(fontName) {
     global Fonts
-    
     for index, font in Fonts {
         if font = fontName {
             return true
@@ -520,21 +161,16 @@ IsFontInList(fontName) {
 ; === ВСПЛЫВАЮЩЕЕ СООБЩЕНИЕ ===
 ShowSaveMessage() {
     global Version, ScriptBaseName
-    
     saveMsg := Gui("+ToolWindow +AlwaysOnTop +Border", "Сохранение")
     saveMsg.SetFont("s10", "Segoe UI")
     saveMsg.MarginX := 20
     saveMsg.MarginY := 15
-    
     theme := GetCurrentTheme()
     saveMsg.BackColor := theme.Background
-    
     msgText := saveMsg.Add("Text", "Center", "✓ Данные сохранены в " . ScriptBaseName . ".ddd")
     msgText.SetFont("c" . theme.Text)
     msgText.Opt("Background" . theme.Background)
-    
     saveMsg.Show("AutoSize Center NoActivate")
-    
     SetTimer(() => CloseSaveMessage(saveMsg), 1500)
 }
 
@@ -549,25 +185,291 @@ CloseSaveMessage(msgGui) {
     }
 }
 
+; === ФУНКЦИЯ ДЛЯ СОХРАНЕНИЯ ТЕКСТА В UTF-8 БЕЗ BOM ===
+SaveTextToFileUTF8NoBOM(filePath, text) {
+    try {
+        folderPath := SubStr(filePath, 1, InStr(filePath, "\", , -1) - 1)
+        if (folderPath != "" && !DirExist(folderPath)) {
+            DirCreate(folderPath)
+        }
+        text := StrReplace(text, "`r`r`n", "`r`n")
+        text := StrReplace(text, "`n", "`r`n")
+        text := StrReplace(text, "`r`r`n", "`r`n")
+        file := FileOpen(filePath, "w", "UTF-8-RAW")
+        file.Write(text)
+        file.Close()
+        return true
+    }
+    catch as e {
+        MsgBox "Ошибка сохранения файла " filePath ": " e.Message
+        return false
+    }
+}
+
+; === ЗАГРУЗКА ДАННЫХ ИЗ ФАЙЛА ===
+LoadData() {
+    global DataFile, TabCount, TabContents, AlwaysOnTop, TransparencyLevel
+    global FontSize, FontName, ThemeLevel, TabSize, CursorPositions, Fonts
+    
+    TabContents := []
+    CursorPositions := []
+    
+    loop TabCount {
+        TabContents.Push("")
+        CursorPositions.Push(1)
+    }
+    
+    AlwaysOnTop := 0
+    TransparencyLevel := 0
+    FontSize := 10
+    FontName := "Consolas"
+    ThemeLevel := 0
+    TabSize := 4
+    
+    if FileExist(DataFile) {
+        try {
+            content := FileRead(DataFile, "UTF-8")
+            if (content != "") {
+                sections := StrSplit(content, "`r`n---SECTION---`r`n")
+                
+                for section in sections {
+                    trimmedSection := Trim(section, " `t`r`n")
+                    if (trimmedSection = "") {
+                        continue
+                    }
+                    
+                    lines := StrSplit(trimmedSection, "`n", "`r")
+                    firstLine := lines[1]
+                    
+                    if (firstLine = "[SETTINGS]") {
+                        for line in lines {
+                            trimmedLine := Trim(line)
+                            if (trimmedLine = "" || SubStr(trimmedLine, 1, 1) = "[" || SubStr(trimmedLine, 1, 1) = ";") {
+                                continue
+                            }
+                            
+                            if (InStr(trimmedLine, "=")) {
+                                lineParts := StrSplit(trimmedLine, "=", "", 2)
+                                key := Trim(lineParts[1])
+                                value := Trim(lineParts[2])
+                                
+                                switch key {
+                                    case "AlwaysOnTop": AlwaysOnTop := Integer(value)
+                                    case "TransparencyLevel": TransparencyLevel := Integer(value)
+                                    case "FontSize": FontSize := Integer(value)
+                                    case "FontName": FontName := value
+                                    case "ThemeLevel": ThemeLevel := Integer(value)
+                                    case "TabSize": TabSize := Integer(value)
+                                }
+                            }
+                        }
+                    }
+                    else if (firstLine = "[CURSOR_POSITIONS]") {
+                        for line in lines {
+                            trimmedLine := Trim(line)
+                            if (trimmedLine = "" || SubStr(trimmedLine, 1, 1) = "[" || SubStr(trimmedLine, 1, 1) = ";") {
+                                continue
+                            }
+                            
+                            if (InStr(trimmedLine, "=")) {
+                                lineParts := StrSplit(trimmedLine, "=", "", 2)
+                                key := Trim(lineParts[1])
+                                value := Trim(lineParts[2])
+                                
+                                if (SubStr(key, 1, 3) = "Tab") {
+                                    tabIndex := Integer(SubStr(key, 4)) + 1
+                                    if (tabIndex >= 1 && tabIndex <= TabCount) {
+                                        pos := Integer(value)
+                                        if (pos > 0) {
+                                            CursorPositions[tabIndex] := pos
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else if (firstLine = "[TAB_DATA]") {
+                        tabData := SubStr(trimmedSection, StrLen("[TAB_DATA]`r`n") + 1)
+                        if (tabData != "") {
+                            tabParts := StrSplit(tabData, "`r`n<TAB-")
+                            loop tabParts.Length {
+                                tabIndex := A_Index
+                                part := tabParts[tabIndex]
+                                
+                                if (tabIndex = 1) {
+                                    TabContents[1] := Trim(part, " `t`r`n")
+                                } else {
+                                    closePos := InStr(part, "<")
+                                    if (closePos > 0) {
+                                        content := SubStr(part, closePos + 1)
+                                        TabContents[tabIndex] := Trim(content, " `t`r`n")
+                                    } else {
+                                        TabContents[tabIndex] := Trim(part, " `t`r`n")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch as e {
+            MsgBox "Ошибка загрузки файла данных. Используются значения по умолчанию.`n`n" 
+                . "Файл: " DataFile "`n"
+                . "Ошибка: " e.Message, "PageX " Version, "Icon!"
+        }
+    }
+    
+    if !IsFontInList(FontName) {
+        FontName := Fonts[1]
+    }
+}
+
+; === СОХРАНЕНИЕ ВСЕХ ДАННЫХ ===
+SaveData(showMessage := false) {
+    global DataFile, TabCount, TabContents, NeedsSave, Version, CurrentTabIndex, contentEdit
+    global AlwaysOnTop, TransparencyLevel, FontSize, FontName, ThemeLevel, TabSize, CursorPositions, MyGui
+    
+    try {
+        if (IsObject(contentEdit) && contentEdit.Hwnd) {
+            TabContents[CurrentTabIndex] := contentEdit.Value
+        }
+        
+        if (IsObject(contentEdit) && contentEdit.Hwnd) {
+            try {
+                cursorPos := SendMessage(0x00B0, 0, 0, contentEdit.Hwnd) + 1
+                if (cursorPos > 0) {
+                    CursorPositions[CurrentTabIndex] := cursorPos
+                }
+            }
+            catch {
+                CursorPositions[CurrentTabIndex] := 1
+            }
+        }
+        
+        windowWidth := DEFAULT_MAIN_WIDTH
+        windowHeight := DEFAULT_MAIN_HEIGHT
+        if (IsObject(MyGui)) {
+            try {
+                MyGui.GetPos(, , &w, &h)
+                windowWidth := w
+                windowHeight := h
+            }
+            catch {
+                ; Игнорируем ошибки получения размера
+            }
+        }
+        
+        content := ""
+        content .= "[SETTINGS]`r`n"
+        content .= "AlwaysOnTop=" . AlwaysOnTop . "`r`n"
+        content .= "TransparencyLevel=" . TransparencyLevel . "`r`n"
+        content .= "FontSize=" . FontSize . "`r`n"
+        content .= "FontName=" . FontName . "`r`n"
+        content .= "ThemeLevel=" . ThemeLevel . "`r`n"
+        content .= "TabSize=" . TabSize . "`r`n"
+        content .= "---SECTION---`r`n"
+        
+        content .= "[CURSOR_POSITIONS]`r`n"
+        loop TabCount {
+            content .= "Tab" . (A_Index - 1) . "=" . CursorPositions[A_Index] . "`r`n"
+        }
+        content .= "---SECTION---`r`n"
+        
+        content .= "[WINDOW_SIZE]`r`n"
+        content .= "Width=" . windowWidth . "`r`n"
+        content .= "Height=" . windowHeight . "`r`n"
+        content .= "---SECTION---`r`n"
+        
+        content .= "[TAB_DATA]`r`n"
+        loop TabCount {
+            tabIndex := A_Index
+            content .= TabContents[tabIndex]
+            if (tabIndex < TabCount) {
+                content .= "`r`n<TAB-" . tabIndex . "<`r`n"
+            }
+        }
+        content .= "`r`n"
+        
+        if (!SaveTextToFileUTF8NoBOM(DataFile, content)) {
+            throw Error("Не удалось сохранить данные в файл")
+        }
+        
+        NeedsSave := false
+        
+        if (showMessage) {
+            ShowSaveMessage()
+        }
+        
+        return true
+        
+    } catch as e {
+        MsgBox "Ошибка сохранения: " e.Message, "PageX " Version " - Ошибка", "Iconx"
+        return false
+    }
+}
+
+; === ЗАГРУЗКА РАЗМЕРА ОКНА ===
+LoadWindowSizeSetting(key, defaultValue) {
+    global DataFile
+    if FileExist(DataFile) {
+        try {
+            content := FileRead(DataFile, "UTF-8")
+            sections := StrSplit(content, "`r`n---SECTION---`r`n")
+            for section in sections {
+                trimmedSection := Trim(section, " `t`r`n")
+                if (trimmedSection = "") {
+                    continue
+                }
+                lines := StrSplit(trimmedSection, "`n", "`r")
+                firstLine := lines[1]
+                if (firstLine = "[WINDOW_SIZE]") {
+                    for line in lines {
+                        trimmedLine := Trim(line)
+                        if (trimmedLine = "" || SubStr(trimmedLine, 1, 1) = "[" || SubStr(trimmedLine, 1, 1) = ";") {
+                            continue
+                        }
+                        if (InStr(trimmedLine, "=")) {
+                            lineParts := StrSplit(trimmedLine, "=", "", 2)
+                            lineKey := Trim(lineParts[1])
+                            lineValue := Trim(lineParts[2])
+                            if (lineKey = key) {
+                                return Integer(lineValue)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch {
+            ; Игнорируем ошибки загрузки
+            return defaultValue
+        }
+    }
+    return defaultValue
+}
+
+; === ИНИЦИАЛИЗАЦИЯ МАССИВОВ ===
+loop TabCount {
+    LastScrollPositions.Push(0)
+    LastHScrollPositions.Push(0)
+}
+
 ; === ОСНОВНОЕ ОКНО ===
 CreateMainWindow() {
-    global MyGui, Version
-    global Btn_AlwaysOnTop, Btn_Theme, Btn_Transparency, Btn_Font, Btn_FontSize, Btn_TabSize
+    global MyGui, Version, Btn_AlwaysOnTop, Btn_Theme, Btn_Transparency, Btn_Font, Btn_FontSize, Btn_TabSize
     global contentEdit, lineNumberCtrl, TabHeaders, helpButton, sepLine, LineNumberWidth
     global AlwaysOnTop, TransparencyLevel, FontSize, FontName, ThemeLevel, TabSize, TabContents, CurrentTabIndex
     
-    ; Загружаем сохраненные размеры окна
     WindowWidth := LoadWindowSizeSetting("Width", DEFAULT_MAIN_WIDTH)
     WindowHeight := LoadWindowSizeSetting("Height", DEFAULT_MAIN_HEIGHT)
     
-	;MyGui := Gui(, "PageX " Version " - Блокнот с вкладками (" . ScriptBaseName . ")")
     MyGui := Gui(, "PageX " Version " - Блокнот с вкладками")
     MyGui.Opt("+Resize +MinSize" MIN_MAIN_WIDTH "x" MIN_MAIN_HEIGHT)
     MyGui.SetFont("s10", "Segoe UI")
     MyGui.MarginX := 10
     MyGui.MarginY := 10
     
-    ; === ПАНЕЛЬ НАСТРОЕК ===
     Btn_AlwaysOnTop := MyGui.Add("Button", "x10 y10 w40 h22", GetArrowText(AlwaysOnTop))
     Btn_AlwaysOnTop.OnEvent("Click", ToggleAlwaysOnTop)
     Btn_AlwaysOnTop.ToolTip := "ОКНО`nПоложение окна: " . (AlwaysOnTop ? "ПОВЕРХ ВСЕХ (ВКЛ)" : "ОБЫЧНОЕ (ВЫКЛ)") . "`nНажмите для переключения"
@@ -580,7 +482,6 @@ CreateMainWindow() {
     Btn_Transparency.OnEvent("Click", CycleTransparency)
     Btn_Transparency.ToolTip := "ПРОЗРАЧНОСТЬ`nТекущий уровень: " . GetTransparencyPercent(TransparencyLevel) . "`nНажмите для переключения"
     
-    ; === КНОПКИ РАЗМЕРА ШРИФТА ===
     Btn_Font := MyGui.Add("Button", "x+10 y10 w100 h22", GetFontNameButtonText())
     Btn_Font.OnEvent("Click", CycleFont)
     Btn_Font.ToolTip := "ШРИФТ`nТекущий шрифт: " . FontName . "`nНажмите для смены шрифта"
@@ -589,7 +490,6 @@ CreateMainWindow() {
     Btn_FontSize.OnEvent("Click", CycleFontSize)
     Btn_FontSize.ToolTip := "РАЗМЕР ШРИФТА`nТекущий размер: " . FontSize . "pt`nНажмите для изменения (8-24)"
     
-    ; === КНОПКА: РАЗМЕР ТАБУЛЯЦИИ ===
     Btn_TabSize := MyGui.Add("Button", "x+10 y10 w60 h22", GetTabSizeButtonText())
     Btn_TabSize.OnEvent("Click", CycleTabSize)
     Btn_TabSize.ToolTip := GetTabSizeToolTip()
@@ -598,13 +498,11 @@ CreateMainWindow() {
     helpButton.OnEvent("Click", ToggleHelp)
     helpButton.ToolTip := "Открыть справку`nГорячая клавиша: F1"
     
-    ; === КНОПКИ ВКЛАДОК (второй ряд) ===
     tabHeaderX := 10
     tabHeaderY := 40
     
     loop TabCount {
-        tabNumber := A_Index  ; Нумерация от 1 до 10
-        
+        tabNumber := A_Index
         if (A_Index = CurrentTabIndex) {
             btnText := "▶ " . tabNumber . " ◀"
         } else {
@@ -617,14 +515,11 @@ CreateMainWindow() {
         
         headerBtn.OnEvent("Click", TabHeader_Click.Bind(A_Index))
         TabHeaders.Push(headerBtn)
-        
         tabHeaderX += 55
     }
     
-    ; Разделитель
     sepLine := MyGui.Add("Text", "x10 y68 w" (WindowWidth - 20) " 0x10")
     
-    ; === ОБЛАСТЬ СОДЕРЖИМОГО С НОМЕРАМИ СТРОК ===
     lineNumberCtrl := MyGui.Add("Edit", 
         Format("x{1} y{2} w{3} h{4} +Multi +Right -VScroll +Border -TabStop", 
                10, 75, LineNumberWidth, WindowHeight - 90),
@@ -632,34 +527,28 @@ CreateMainWindow() {
     lineNumberCtrl.SetFont("s" FontSize, FontName)
     lineNumberCtrl.OnEvent("Change", OnLineNumberChange)
     
-    ; Основное поле редактирования
     contentEdit := MyGui.Add("Edit", 
         Format("x{1} y{2} w{3} h{4} +Multi +HScroll +VScroll +0x100 +WantTab -Wrap", 
                10 + LineNumberWidth, 75, WindowWidth - 25 - LineNumberWidth, WindowHeight - 90),
         TabContents[CurrentTabIndex])
     contentEdit.SetFont("s" FontSize, FontName)
     contentEdit.OnEvent("Change", OnEditChangeWithLineNumbers)
-    contentEdit.OnEvent("Focus", OnEditFocus)
-    contentEdit.OnEvent("LoseFocus", OnEditLoseFocus)
     
-    ; Обработчики окна
     MyGui.OnEvent("Close", SaveAndExit)
     MyGui.OnEvent("Size", GuiSize)
     
-    ; Используем сохраненные размеры окна
     MyGui.Show("w" WindowWidth " h" WindowHeight)
+    ApplyWindowSettings()
 }
 
 ; === ОБРАБОТКА ТАБУЛЯЦИИ ===
 OnTabKey(*) {
     global TabSize
-    
     SendInput "{Space " . TabSize . "}"
-    
     return true
 }
 
-; === ГОРИЗОНТАЛЬНАЯ ПРОКРУТКИ ===
+; === ГОРИЗОНТАЛЬНАЯ ПРОКРУТКА ===
 PerformHorizontalScroll(ctrl, direction) {
     try {
         SendMessage(0x0114, direction > 0 ? 1 : 0, 0, ctrl.Hwnd)
@@ -669,14 +558,12 @@ PerformHorizontalScroll(ctrl, direction) {
     }
 }
 
-; === УПРОЩЕННЫЙ ОБРАБОТЧИК КОЛЕСА МЫШИ ===
+; === ОБРАБОТЧИК КОЛЕСА МЫШИ ===
 WheelHandler(wParam, lParam, msg, hwnd) {
-    global contentEdit, CurrentTabIndex
-    
+    global contentEdit
     if (GetKeyState("Ctrl")) {
         delta := wParam >> 16
         delta := delta > 0x7FFF ? -(0x10000 - delta) : delta
-        
         if (IsObject(contentEdit) && contentEdit.Hwnd) {
             if (delta > 0) {
                 PerformHorizontalScroll(contentEdit, 1)
@@ -688,12 +575,10 @@ WheelHandler(wParam, lParam, msg, hwnd) {
     }
 }
 
-; === ФУНКЦИИ УПРАВЛЕНИЯ НАСТРОЙКАМИ ===
+; === УПРАВЛЕНИЕ НАСТРОЙКАМИ ===
 ToggleAlwaysOnTop(*) {
     global AlwaysOnTop, Btn_AlwaysOnTop, Version
-    
     AlwaysOnTop := !AlwaysOnTop
-    
     if AlwaysOnTop {
         WinSetAlwaysOnTop true, "PageX " Version " - Блокнот с вкладками"
         Btn_AlwaysOnTop.Text := "UP"
@@ -703,28 +588,22 @@ ToggleAlwaysOnTop(*) {
         Btn_AlwaysOnTop.Text := "DWN"
         Btn_AlwaysOnTop.ToolTip := "ОКНО`nПоложение окна: ОБЫЧНОЕ (ВЫКЛ)`nНажмите для переключения"
     }
-    
     SaveData(false)
 }
 
 CycleTransparency(*) {
     global TransparencyLevel, Btn_Transparency
-    
     TransparencyLevel := Mod(TransparencyLevel + 1, 3)
     ApplyTransparency()
-    
     Btn_Transparency.Text := GetTransparencyText(TransparencyLevel)
     Btn_Transparency.ToolTip := "ПРОЗРАЧНОСТЬ`nТекущий уровень: " . GetTransparencyPercent(TransparencyLevel) . "`nНажмите для переключения"
-    
     SaveData(false)
 }
 
 ApplyTransparency() {
     global TransparencyLevel, Version
-    
     if !WinExist("PageX " Version " - Блокнот с вкладками")
         return
-    
     switch TransparencyLevel {
         case 1: WinSetTransparent 192, "PageX " Version " - Блокнот с вкладками"
         case 2: WinSetTransparent 128, "PageX " Version " - Блокнот с вкладками"
@@ -734,14 +613,10 @@ ApplyTransparency() {
 
 CycleTheme(*) {
     global ThemeLevel, Btn_Theme
-  
     ThemeLevel := Mod(ThemeLevel + 1, 2)
-    
     Btn_Theme.Text := GetThemeIcon(ThemeLevel)
     Btn_Theme.ToolTip := "ТЕМА`nТекущая тема: " . GetCurrentTheme().Name . "`nНажмите для переключения"
-    
     ApplyTheme()
-    
     SaveData(false)
 }
 
@@ -749,24 +624,19 @@ ApplyTheme() {
     global MyGui, Btn_AlwaysOnTop, Btn_Theme, Btn_Transparency, Btn_Font, Btn_FontSize, helpButton, sepLine
     global contentEdit, FontSize, FontName, ThemeLevel, CurrentTabIndex, AlwaysOnTop, TransparencyLevel
     global lineNumberCtrl, TabHeaders, Btn_TabSize
-    
     theme := GetCurrentTheme()
-    
     Btn_AlwaysOnTop.Text := GetArrowText(AlwaysOnTop)
     Btn_Transparency.Text := GetTransparencyText(TransparencyLevel)
     Btn_Font.Text := GetFontNameButtonText()
     Btn_FontSize.Text := GetFontSizeButtonText()
     Btn_TabSize.Text := GetTabSizeButtonText()
-    
     ApplySimpleTheme()
 }
 
 ApplySimpleTheme() {
     global MyGui, Btn_AlwaysOnTop, Btn_Theme, Btn_Transparency, Btn_Font, Btn_FontSize, helpButton, sepLine
     global contentEdit, FontSize, FontName, TabHeaders, lineNumberCtrl, Btn_TabSize
-    
     theme := GetCurrentTheme()
-    
     try {
         MyGui.BackColor := theme.Background
     }
@@ -798,7 +668,6 @@ ApplySimpleTheme() {
         }
     }
     
-    ; Стилизация кнопок вкладок
     loop TabHeaders.Length {
         headerBtn := TabHeaders[A_Index]
         if (IsObject(headerBtn)) {
@@ -839,8 +708,7 @@ ApplySimpleTheme() {
 }
 
 CycleFont(*) {
-    global Fonts, FontName, Btn_Font, NeedsSave, contentEdit, CursorPositions, CurrentTabIndex, TabContents
-    
+    global Fonts, FontName, Btn_Font, contentEdit, CursorPositions, CurrentTabIndex, TabContents
     currentIndex := 0
     loop Fonts.Length {
         if (Fonts[A_Index] = FontName) {
@@ -848,32 +716,27 @@ CycleFont(*) {
             break
         }
     }
-    
     if (currentIndex = Fonts.Length) {
         FontName := Fonts[1]
     } else {
         FontName := Fonts[currentIndex + 1]
     }
-    
     UpdateFontAndSize()
     SaveData(false)
 }
 
 CycleFontSize(*) {
     global FontSize, Btn_FontSize
-    
     FontSize := FontSize + 1
     if (FontSize > 24) {
         FontSize := 8
     }
-    
     UpdateFontAndSize()
     SaveData(false)
 }
 
 CycleTabSize(*) {
     global TabSize, TabSizes, Btn_TabSize
-    
     currentIndex := 0
     loop TabSizes.Length {
         if (TabSizes[A_Index] = TabSize) {
@@ -881,35 +744,26 @@ CycleTabSize(*) {
             break
         }
     }
-    
     if (currentIndex = TabSizes.Length) {
         TabSize := TabSizes[1]
     } else {
         TabSize := TabSizes[currentIndex + 1]
     }
-    
     Btn_TabSize.Text := GetTabSizeButtonText()
     Btn_TabSize.ToolTip := GetTabSizeToolTip()
-    
     SaveData(false)
 }
 
 UpdateFontAndSize() {
     global Btn_Font, Btn_FontSize, FontName, FontSize, contentEdit, CurrentTabIndex, CursorPositions
     global TabHeaders, lineNumberCtrl, LineNumbersData, VisibleLinesCache, TabContents
-    
-    ; Сохраняем текущий текст
     if (IsObject(contentEdit) && contentEdit.Hwnd) {
         TabContents[CurrentTabIndex] := contentEdit.Value
     }
-    
     Btn_Font.Text := GetFontNameButtonText()
     Btn_Font.ToolTip := "ШРИФТ`nТекущий шрифт: " . FontName . "`nНажмите для смены шрифта"
-    
     Btn_FontSize.Text := GetFontSizeButtonText()
     Btn_FontSize.ToolTip := "РАЗМЕР ШРИФТА`nТекущий размер: " . FontSize . "pt`nНажмите для изменения (8-24)"
-    
-    ; Обновляем шрифт кнопок вкладок
     loop TabHeaders.Length {
         if (IsObject(TabHeaders[A_Index])) {
             try {
@@ -920,7 +774,6 @@ UpdateFontAndSize() {
             }
         }
     }
-    
     if (IsObject(contentEdit) && contentEdit.Hwnd) {
         try {
             contentEdit.SetFont("s" FontSize, FontName)
@@ -931,13 +784,10 @@ UpdateFontAndSize() {
             ; Игнорируем ошибки обновления контента
         }
     }
-    
     VisibleLinesCache := CalculateVisibleLines(CurrentTabIndex)
-    
     if (IsObject(lineNumberCtrl) && lineNumberCtrl.Hwnd) {
         try {
             lineNumberCtrl.SetFont("s" FontSize, FontName)
-            
             if (LineNumbersData.Has(CurrentTabIndex)) {
                 LineNumbersData.Delete(CurrentTabIndex)
                 UpdateLineNumbersData(CurrentTabIndex, true)
@@ -948,43 +798,28 @@ UpdateFontAndSize() {
             ; Игнорируем ошибки обновления номеров строк
         }
     }
-    
     ApplyTheme()
     SaveData(false)
 }
 
-; === ОБРАБОТЧИК КНОПОК ВКЛАДОК ===
+; === ВКЛАДКИ ===
 TabHeader_Click(tabIndex, *) {
     global CurrentTabIndex, TabHeaders, contentEdit, TabContents, CursorPositions
-    
-    ; Сохраняем текст текущей вкладки перед переключением
     if (IsObject(contentEdit) && contentEdit.Hwnd) {
         TabContents[CurrentTabIndex] := contentEdit.Value
     }
-    
-    ; Сохраняем старую активную вкладку
     oldTab := CurrentTabIndex
     CurrentTabIndex := tabIndex
-    
-    ; Обновляем заголовки
     UpdateTabHeaders(oldTab, tabIndex)
-    
-    ; Обновляем контент
     UpdateContent(tabIndex)
-    
-    ; Синхронизируем номера строк
     SyncTabChange()
 }
 
 UpdateTabHeaders(oldTab, newTab) {
     global TabHeaders
-    
-    ; Получаем текущую тему
     theme := GetCurrentTheme()
-    
-    ; Сбрасываем старую активную вкладку
     if (oldTab >= 1 && oldTab <= TabHeaders.Length) {
-        tabNumber := oldTab  ; Нумерация от 1 до 10
+        tabNumber := oldTab
         TabHeaders[oldTab].Text := "  " . tabNumber . "  "
         try {
             TabHeaders[oldTab].SetFont("Norm")
@@ -994,10 +829,8 @@ UpdateTabHeaders(oldTab, newTab) {
             ; Игнорируем ошибки установки стилей
         }
     }
-    
-    ; Выделяем новую активную вкладку
     if (newTab >= 1 && newTab <= TabHeaders.Length) {
-        tabNumber := newTab  ; Нумерация от 1 до 10
+        tabNumber := newTab
         TabHeaders[newTab].Text := "▶ " . tabNumber . " ◀"
         try {
             TabHeaders[newTab].SetFont("Bold")
@@ -1011,8 +844,6 @@ UpdateTabHeaders(oldTab, newTab) {
 
 UpdateContent(tabIndex) {
     global contentEdit, TabContents, CursorPositions
-    
-    ; Загружаем текст из хранилища
     if (IsObject(contentEdit) && contentEdit.Hwnd) {
         try {
             contentEdit.Value := TabContents[tabIndex]
@@ -1025,7 +856,7 @@ UpdateContent(tabIndex) {
     }
 }
 
-; === ФУНКЦИИ ДЛЯ НОМЕРОВ СТРОК ===
+; === НОМЕРА СТРОК ===
 SetCursorPosition(editCtrl, position) {
     if (IsObject(editCtrl) && position > 0) {
         try {
@@ -1039,31 +870,23 @@ SetCursorPosition(editCtrl, position) {
 
 CalculateVisibleLines(tabIndex) {
     global FontSize, VisibleLinesCache, contentEdit
-    
     if (!IsObject(contentEdit) || !contentEdit.Hwnd)
         return VisibleLinesCache
-    
     contentEdit.GetPos(, , , &H)
-    
     lineHeight := FontSize * 1.5
-    
     if (lineHeight > 0) {
         visibleLines := Floor(H / lineHeight)
         visibleLines := Max(20, visibleLines + 5)
         VisibleLinesCache := visibleLines
     }
-    
     return VisibleLinesCache
 }
 
 UpdateLineNumbersData(tabIndex, forceUpdate := false) {
     global contentEdit, LineNumbersData, TabContents
-    
     if (!IsObject(contentEdit) || !contentEdit.Hwnd)
         return
-    
     currentText := TabContents[tabIndex]
-    
     if (!forceUpdate && LineNumbersData.Has(tabIndex)) {
         oldText := ""
         try {
@@ -1076,20 +899,16 @@ UpdateLineNumbersData(tabIndex, forceUpdate := false) {
             return
         }
     }
-    
     lineCount := 1
     if (currentText != "") {
         lines := StrSplit(currentText, "`n", "`r")
         lineCount := lines.Length
-        
         if (SubStr(currentText, -1) = "`n" || SubStr(currentText, -2) = "`r`n") {
             lineCount += 1
         }
     }
-    
     numbers := []
     maxDigits := StrLen(lineCount)
-    
     loop lineCount {
         numberStr := Format("{:d}", A_Index)
         while (StrLen(numberStr) < maxDigits) {
@@ -1097,39 +916,27 @@ UpdateLineNumbersData(tabIndex, forceUpdate := false) {
         }
         numbers.Push(numberStr)
     }
-    
     LineNumbersData[tabIndex] := {numbers: numbers, text: currentText}
 }
 
 SyncLineNumbersForTab(tabIndex, forceSync := false) {
-    global contentEdit, lineNumberCtrl, LineNumbersData
-    global VisibleLinesCache, LastScrollPositions
-    
+    global contentEdit, lineNumberCtrl, LineNumbersData, VisibleLinesCache, LastScrollPositions
     if (!IsObject(contentEdit) && contentEdit.Hwnd || !IsObject(lineNumberCtrl) || !lineNumberCtrl.Hwnd)
         return
-    
     currentLine := SendMessage(0x00CE, 0, 0, contentEdit.Hwnd)
-    
     if (!forceSync && currentLine = LastScrollPositions[tabIndex])
         return
-    
     LastScrollPositions[tabIndex] := currentLine
-    
     UpdateLineNumbersData(tabIndex)
-    
     numbersData := LineNumbersData[tabIndex]
     if (!numbersData)
         return
-    
     numbers := numbersData.numbers
     if (!numbers.Length)
         return
-    
     startIdx := Max(1, currentLine + 1)
     visibleLines := CalculateVisibleLines(tabIndex)
-    
     newText := ""
-    
     loop visibleLines {
         idx := startIdx + A_Index - 1
         if (idx <= numbers.Length) {
@@ -1138,7 +945,6 @@ SyncLineNumbersForTab(tabIndex, forceSync := false) {
             newText .= "`r`n"
         }
     }
-    
     lineNumberCtrl.Value := RTrim(newText, "`r`n")
 }
 
@@ -1151,23 +957,16 @@ ActiveSync() {
     SyncAllTabs()
 }
 
-; === ОБРАБОТЧИК ИЗМЕНЕНИЯ ТЕКСТА ===
 OnEditChangeWithLineNumbers(editCtrl, *) {
     global NeedsSave, CurrentTabIndex, TabContents, contentEdit
-    
     NeedsSave := true
-    
-    ; Сохраняем текст в хранилище текущей вкладки
     TabContents[CurrentTabIndex] := contentEdit.Value
-    
     UpdateLineNumbersData(CurrentTabIndex, true)
     SetTimer(() => SyncLineNumbersForTab(CurrentTabIndex, true), -50)
 }
 
-; === ОБРАБОТЧИК ПРОКРУТКИ ===
 OnScrollMsg(wParam, lParam, msg, hwnd) {
     global contentEdit, CurrentTabIndex
-    
     if (IsObject(contentEdit) && contentEdit.Hwnd) {
         if (hwnd = contentEdit.Hwnd) {
             SyncLineNumbersForTab(CurrentTabIndex)
@@ -1176,27 +975,19 @@ OnScrollMsg(wParam, lParam, msg, hwnd) {
     }
 }
 
-; === СИНХРОНИЗАЦИЯ ПРИ ПЕРЕКЛЮЧЕНИИ ВКЛАДОК ===
 SyncTabChange() {
     global CurrentTabIndex, contentEdit, CursorPositions
-    
     UpdateLineNumbersData(CurrentTabIndex, true)
     LastScrollPositions[CurrentTabIndex] := -1
     SyncLineNumbersForTab(CurrentTabIndex, true)
-    
-    ; Устанавливаем курсор
     SetCursorPosition(contentEdit, CursorPositions[CurrentTabIndex])
 }
 
-; === ОБРАБОТЧИК ИЗМЕНЕНИЯ РАЗМЕРА ОКНА ===
+; === ИЗМЕНЕНИЕ РАЗМЕРА ОКНА ===
 GuiSize(GuiObj, MinMax, Width, Height) {
-    global TabHeaders, contentEdit, sepLine, helpButton, lineNumberCtrl
-    global VisibleLinesCache, CurrentTabIndex, LineNumberWidth
-    
+    global TabHeaders, contentEdit, sepLine, helpButton, lineNumberCtrl, VisibleLinesCache, CurrentTabIndex, LineNumberWidth
     if (MinMax = -1)
         return
-    
-    ; Обновляем ширину разделителя
     if (IsObject(sepLine)) {
         try {
             sepLine.Move(, , Width - 20)
@@ -1205,8 +996,6 @@ GuiSize(GuiObj, MinMax, Width, Height) {
             ; Игнорируем ошибки перемещения
         }
     }
-    
-    ; Обновляем положение кнопки Help
     if (helpButton) {
         try {
             helpButton.Move(Width - 70, 10, 60)
@@ -1215,15 +1004,10 @@ GuiSize(GuiObj, MinMax, Width, Height) {
             ; Игнорируем ошибки перемещения
         }
     }
-    
-    ; Обновляем размеры области редактирования
     editHeight := Height - 85
     editWidth := Width - 25 - LineNumberWidth
-    
-    ; Убедимся, что ширина не отрицательная
     if (editWidth < 10)
         editWidth := 10
-    
     if (IsObject(contentEdit) && contentEdit.Hwnd) {
         try {
             contentEdit.Move(10 + LineNumberWidth, 75, editWidth, editHeight)
@@ -1232,7 +1016,6 @@ GuiSize(GuiObj, MinMax, Width, Height) {
             ; Игнорируем ошибки перемещения
         }
     }
-    
     if (IsObject(lineNumberCtrl) && lineNumberCtrl.Hwnd) {
         try {
             lineNumberCtrl.Move(10, 75, LineNumberWidth, editHeight)
@@ -1241,35 +1024,28 @@ GuiSize(GuiObj, MinMax, Width, Height) {
             ; Игнорируем ошибки перемещения
         }
     }
-    
     VisibleLinesCache := CalculateVisibleLines(CurrentTabIndex)
-    
     SetTimer(() => SyncAllTabs(true), -100)
 }
 
 ; === ВЫХОД И СОХРАНЕНИЕ ===
 SaveAndExit(*) {
     global SyncTimer, MyGui, NeedsSave
-    
     if (SyncTimer) {
         SetTimer(ActiveSync, 0)
         SyncTimer := ""
     }
-    
     if (NeedsSave) {
         SaveData(true)
         Sleep 300
     }
-    
     ExitApp
 }
 
 ApplyWindowSettings() {
     global AlwaysOnTop, Version
-    
     if !WinExist("PageX " Version " - Блокнот с вкладками")
         return
-    
     if AlwaysOnTop {
         try {
             WinSetAlwaysOnTop true, "PageX " Version " - Блокнот с вкладками"
@@ -1278,14 +1054,13 @@ ApplyWindowSettings() {
             ; Игнорируем ошибки установки режима окна
         }
     }
-    
     ApplyTheme()
+    ApplyTransparency()
 }
 
 ; === СПРАВКА ===
 ToggleHelp(*) {
     global HelpWindow
-    
     try {
         if IsObject(HelpWindow) && WinExist("ahk_id " HelpWindow.Hwnd) {
             HelpWindow.Destroy()
@@ -1303,7 +1078,6 @@ ToggleHelp(*) {
 ShowHelp(*) {
     global HelpWindow, Version, ThemeLevel, AlwaysOnTop, TransparencyLevel, FontName, FontSize, CurrentTabIndex, TabSize, ScriptBaseName
     global DEFAULT_HELP_WIDTH, DEFAULT_HELP_HEIGHT
-    
     if IsObject(HelpWindow) {
         try {
             if WinExist("ahk_id " HelpWindow.Hwnd) {
@@ -1315,15 +1089,12 @@ ShowHelp(*) {
             HelpWindow := ""
         }
     }
-    
     HelpWindow := Gui("+AlwaysOnTop +ToolWindow -Resize -MaximizeBox -MinimizeBox", "PageX " Version " - Справка")
     HelpWindow.SetFont("s10", "Segoe UI")
     HelpWindow.MarginX := 20
     HelpWindow.MarginY := 20
-    
     theme := GetCurrentTheme()
     HelpWindow.BackColor := theme.Background
-    
     helpText := "PageX " Version "  https://github.com/IgerOK/PageX`n"
     helpText .= "MIT License © 2025`n"
     helpText .= "Без гарантий и обязательств`n"
@@ -1362,13 +1133,14 @@ ShowHelp(*) {
     helpText .= "• <TAB-2<`n"
     helpText .= "• ...и т.д.`n"
     helpText .= "• Разделитель <TAB-X< указывает, что данные вкладки X находятся ВЫШЕ`n"
-    
+    helpText .= "`n📋 ДИАГНОСТИКА:`n"
+    helpText .= "• Файл данных: " ScriptBaseName ".ddd`n"
+    helpText .= "• Файл лога: " ScriptBaseName ".log`n"
+    helpText .= "• При проблемах проверьте файл лога`n"
     helpTextCtrl := HelpWindow.Add("Edit", "w" DEFAULT_HELP_WIDTH " h" DEFAULT_HELP_HEIGHT " +Multi +ReadOnly +VScroll", helpText)
     helpTextCtrl.SetFont("c" . theme.Text)
     helpTextCtrl.Opt("Background" . theme.Background)
-    
     HelpWindow.Show("Center")
-    
     HelpWindow.OnEvent("Close", CloseHelpWindow)
 }
 
@@ -1385,39 +1157,25 @@ CloseHelpWindow(*) {
     }
 }
 
-; === ОБРАБОТЧИК ИЗМЕНЕНИЯ ТЕКСТА В ПОЛЕ НОМЕРОВ СТРОК ===
 OnLineNumberChange(ctrl, *) {
     SetTimer(() => RestoreLineNumbers(ctrl), -1)
 }
 
-; === ВОССТАНОВЛЕНИЕ НОМЕРОВ СТРОК ПОСЛЕ ИЗМЕНЕНИЯ ПОЛЬЗОВАТЕЛЕМ ===
 RestoreLineNumbers(ctrl) {
     global CurrentTabIndex
     SyncLineNumbersForTab(CurrentTabIndex, true)
 }
 
-; === ОБРАБОТЧИКИ ФОКУСА ===
-OnEditFocus(editCtrl, *) {
-    global LastFocusedEdit
-    LastFocusedEdit := CurrentTabIndex
-}
-
-OnEditLoseFocus(editCtrl, *) {
-    ; Курсор сохраняется автоматически при SaveData()
-}
-
-; === ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ SendMessage ===
 SendMessage(Msg, wParam, lParam, hwnd) {
     return DllCall("SendMessage", "ptr", hwnd, "uint", Msg, "ptr", wParam, "ptr", lParam, "int")
 }
 
 ; === ГОРЯЧИЕ КЛАВИШИ ===
 #HotIf WinActive("PageX " Version " - Блокнот с вкладками")
-^s:: {
-    SaveData(true)
-}
+^s::SaveData(true)
 
-^q:: {
+^q::
+{
     SaveData(true)
     Sleep 300
     ExitApp
@@ -1425,7 +1183,6 @@ SendMessage(Msg, wParam, lParam, hwnd) {
 
 F1::ToggleHelp()
 
-; Горячие клавиши для вкладок 1-9 (Ctrl+1..Ctrl+9)
 ^1::SwitchTab(1)
 ^2::SwitchTab(2)
 ^3::SwitchTab(3)
@@ -1435,11 +1192,10 @@ F1::ToggleHelp()
 ^7::SwitchTab(7)
 ^8::SwitchTab(8)
 ^9::SwitchTab(9)
-
-; Ctrl+0 для вкладки 10
 ^0::SwitchTab(10)
 
-^+Up:: {
+^+Up::
+{
     global FontSize
     if (FontSize < 24) {
         FontSize += 1
@@ -1448,7 +1204,8 @@ F1::ToggleHelp()
     }
 }
 
-^+Down:: {
+^+Down::
+{
     global FontSize
     if (FontSize > 8) {
         FontSize -= 1
@@ -1457,17 +1214,20 @@ F1::ToggleHelp()
     }
 }
 
-Tab:: {
+Tab::
+{
     OnTabKey()
     return true
 }
 
-^Tab:: {
+^Tab::
+{
     OnTabKey()
     return true
 }
 
-^WheelUp:: {
+^WheelUp::
+{
     global contentEdit
     if (IsObject(contentEdit) && contentEdit.Hwnd) {
         PerformHorizontalScroll(contentEdit, 1)
@@ -1475,7 +1235,8 @@ Tab:: {
     return
 }
 
-^WheelDown:: {
+^WheelDown::
+{
     global contentEdit
     if (IsObject(contentEdit) && contentEdit.Hwnd) {
         PerformHorizontalScroll(contentEdit, -1)
@@ -1491,20 +1252,14 @@ F1::ToggleHelp()
 
 SwitchTab(TabNumber) {
     global CurrentTabIndex, TabHeaders, contentEdit, CursorPositions, TabContents
-    
     if (TabNumber >= 1 && TabNumber <= 10) {
-        ; Сохраняем текущую вкладку
         if (IsObject(contentEdit) && contentEdit.Hwnd) {
             TabContents[CurrentTabIndex] := contentEdit.Value
         }
-        
         oldTab := CurrentTabIndex
         CurrentTabIndex := TabNumber
-        
         UpdateTabHeaders(oldTab, TabNumber)
         UpdateContent(TabNumber)
-        
-        ; Синхронизируем номера строк
         SyncTabChange()
     }
 }
@@ -1512,39 +1267,24 @@ SwitchTab(TabNumber) {
 ; === ОСНОВНОЙ КОД ЗАПУСКА ===
 LoadData()
 CreateMainWindow()
-ApplyWindowSettings()
-ApplyTransparency()
-ApplyTheme()
-
-; Инициализируем нумерацию строк при запуске
 UpdateLineNumbersData(CurrentTabIndex, true)
 SyncLineNumbersForTab(CurrentTabIndex, true)
-
-; Инициализируем кнопки вкладок
 UpdateTabHeaders(CurrentTabIndex, CurrentTabIndex)
-
-; Инициализация таймера для синхронизации нумерации строк
 SyncTimer := SetTimer(ActiveSync, 100)
-
-; Регистрируем обработчики прокрутки
 OnMessage(0x0115, OnScrollMsg)
 OnMessage(0x0114, OnScrollMsg)
 OnMessage(0x020A, WheelHandler)
 OnMessage(0x020E, OnScrollMsg)
 
 OnExit(*) {
-    global NeedsSave, SyncTimer, MyGui, contentEdit, TabContents, CurrentTabIndex
-    
+    global NeedsSave, SyncTimer, contentEdit, TabContents, CurrentTabIndex
     if (SyncTimer) {
         SetTimer(ActiveSync, 0)
         SyncTimer := ""
     }
-    
-    ; Сохраняем текущую вкладку
     if (IsObject(contentEdit) && contentEdit.Hwnd) {
         TabContents[CurrentTabIndex] := contentEdit.Value
     }
-    
     if (NeedsSave) {
         SaveData(true)
     }
